@@ -13,6 +13,8 @@ import torch.nn as nn
 import torchvision.models as models
 import torch.utils.model_zoo as model_zoo
 
+from torchvision.models import resnet18, resnet34
+from torchvision.models import ResNet18_Weights, ResNet34_Weights
 
 class ResNetMultiImageInput(models.ResNet):
     """Constructs a resnet model with varying number of input images.
@@ -52,10 +54,26 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
     model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images)
 
     if pretrained:
-        loaded = model_zoo.load_url(models.resnet.model_urls['resnet{}'.format(num_layers)])
-        loaded['conv1.weight'] = torch.cat(
-            [loaded['conv1.weight']] * num_input_images, 1) / num_input_images
-        model.load_state_dict(loaded)
+        if num_layers == 18:
+            weights = ResNet18_Weights.DEFAULT
+            model = resnet18(weights=weights)
+        elif num_layers == 34:
+            weights = ResNet34_Weights.DEFAULT
+            model = resnet34(weights=weights)
+        else:
+            raise ValueError("Only ResNet18 and ResNet34 are supported.")
+
+        # Adjust the first convolutional layer for multi-image input
+        model.conv1.weight.data = torch.cat(
+            [model.conv1.weight.data] * num_input_images, dim=1) / num_input_images
+    else:
+        if num_layers == 18:
+            model = resnet18(weights=None)
+        elif num_layers == 34:
+            model = resnet34(weights=None)
+        else:
+            raise ValueError("Only ResNet18 and ResNet34 are supported.")
+
     return model
 
 
@@ -96,3 +114,4 @@ class ResnetEncoder(nn.Module):
         self.features.append(self.encoder.layer4(self.features[-1]))
 
         return self.features
+

@@ -14,7 +14,7 @@ import numpy as np
 import PIL.Image as pil
 import matplotlib as mpl
 import matplotlib.cm as cm
-
+import json
 import torch
 from torchvision import transforms, datasets
 
@@ -29,10 +29,13 @@ def parse_args():
         description='Simple testing funtion for Monodepthv2 models.')
 
     parser.add_argument('--image_path', type=str,
-                        help='path to a test image or folder of images', required=True)
+                        help='path to a test image or folder of images', required=True)    
+    parser.add_argument('--load_weights_folder', type=str,
+                        help='path to custom model')
     parser.add_argument('--model_name', type=str,
                         help='name of a pretrained model to use',
                         choices=[
+                            "finetuned_mono",
                             "mono_640x192",
                             "stereo_640x192",
                             "mono+stereo_640x192",
@@ -70,11 +73,17 @@ def test_simple(args):
         print("Warning: The --pred_metric_depth flag only makes sense for stereo-trained KITTI "
               "models. For mono-trained models, output depths will not in metric space.")
 
-    download_model_if_doesnt_exist(args.model_name)
-    model_path = os.path.join("models", args.model_name)
-    print("-> Loading model from ", model_path)
+    if args.load_weights_folder is not None:
+        model_path = args.load_weights_folder
+        print("-> Loading model from custom folder: ", model_path)
+    else:
+        download_model_if_doesnt_exist(args.model_name)
+        model_path = os.path.join("models", args.model_name)
+        print("-> Loading model from default model name: ", model_path)
+
     encoder_path = os.path.join(model_path, "encoder.pth")
     depth_decoder_path = os.path.join(model_path, "depth.pth")
+
 
     # LOADING PRETRAINED MODEL
     print("   Loading pretrained encoder")
@@ -121,11 +130,18 @@ def test_simple(args):
                 # don't try to predict disparity for a disparity image!
                 continue
 
-            # Load image and preprocess
+            opt_path = "/u/mzq5fk/tmp/finetuned_mono/models/opt.json"
+            with open(opt_path, 'r') as f:
+                opts = json.load(f)
+            feed_width = opts['width']
+            feed_height = opts['height']
+
+            # Load image, resize to training resolution, and preprocess
             input_image = pil.open(image_path).convert('RGB')
             original_width, original_height = input_image.size
-            input_image = input_image.resize((feed_width, feed_height), pil.LANCZOS)
-            input_image = transforms.ToTensor()(input_image).unsqueeze(0)
+            input_image = input_image.resize((feed_width, feed_height), pil.LANCZOS)  # Resize to match training size
+            input_image = transforms.ToTensor()(input_image).unsqueeze(0)  # Convert to tensor and add batch dimension
+
 
             # PREDICTION
             input_image = input_image.to(device)
@@ -169,3 +185,4 @@ def test_simple(args):
 if __name__ == '__main__':
     args = parse_args()
     test_simple(args)
+
